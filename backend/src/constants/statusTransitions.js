@@ -1,0 +1,159 @@
+const {
+    SHIPMENT_STATUS
+} = require("./shipmentConstants");
+
+
+// ========================================
+// VALID STATUS TRANSITIONS
+// ========================================
+
+const STATUS_TRANSITIONS = {
+
+    [SHIPMENT_STATUS.CREATED]: [
+
+        SHIPMENT_STATUS.PICKED_UP,
+
+        SHIPMENT_STATUS.CANCELLED
+
+    ],
+
+
+    [SHIPMENT_STATUS.PICKED_UP]: [
+
+        SHIPMENT_STATUS.IN_TRANSIT,
+
+        SHIPMENT_STATUS.DELAYED,
+
+        SHIPMENT_STATUS.CANCELLED
+
+    ],
+
+
+    [SHIPMENT_STATUS.IN_TRANSIT]: [
+
+        SHIPMENT_STATUS.ARRIVED_AT_DESTINATION,
+
+        SHIPMENT_STATUS.CUSTOMS_HOLD,
+
+        SHIPMENT_STATUS.DELAYED,
+
+        SHIPMENT_STATUS.LOST,
+
+        SHIPMENT_STATUS.DAMAGED
+
+    ],
+
+
+    [SHIPMENT_STATUS.ARRIVED_AT_DESTINATION]: [
+
+        SHIPMENT_STATUS.CUSTOMS_HOLD,
+
+        SHIPMENT_STATUS.CUSTOMS_CLEARED,
+
+        SHIPMENT_STATUS.OUT_FOR_DELIVERY,
+
+        SHIPMENT_STATUS.DELAYED
+
+    ],
+
+
+    [SHIPMENT_STATUS.CUSTOMS_HOLD]: [
+
+        SHIPMENT_STATUS.CUSTOMS_CLEARED,
+
+        SHIPMENT_STATUS.DELAYED,
+
+        SHIPMENT_STATUS.RETURNED
+
+    ],
+
+
+    [SHIPMENT_STATUS.CUSTOMS_CLEARED]: [
+
+        SHIPMENT_STATUS.OUT_FOR_DELIVERY,
+
+        SHIPMENT_STATUS.IN_TRANSIT
+
+    ],
+
+
+    [SHIPMENT_STATUS.OUT_FOR_DELIVERY]: [
+
+        SHIPMENT_STATUS.DELIVERED,
+
+        SHIPMENT_STATUS.DELIVERY_ATTEMPTED,
+
+        SHIPMENT_STATUS.DELAYED
+
+    ],
+
+
+    [SHIPMENT_STATUS.DELIVERY_ATTEMPTED]: [
+
+        SHIPMENT_STATUS.OUT_FOR_DELIVERY,
+
+        SHIPMENT_STATUS.RETURNED
+
+    ],
+
+
+    [SHIPMENT_STATUS.DELAYED]: [
+
+        SHIPMENT_STATUS.IN_TRANSIT,
+
+        SHIPMENT_STATUS.OUT_FOR_DELIVERY,
+
+        SHIPMENT_STATUS.CUSTOMS_HOLD,
+
+        SHIPMENT_STATUS.DELIVERED
+
+    ],
+
+
+    [SHIPMENT_STATUS.DAMAGED]: [
+
+        SHIPMENT_STATUS.RETURNED,
+
+        SHIPMENT_STATUS.IN_TRANSIT
+
+    ],
+
+
+    [SHIPMENT_STATUS.LOST]: [
+
+        SHIPMENT_STATUS.RETURNED
+
+    ]
+
+};
+
+
+// ========================================
+// CHECK STATUS TRANSITION
+// ========================================
+
+const isValidStatusTransition = (
+    currentStatus,
+    newStatus
+) => {
+
+    if (currentStatus === newStatus) {
+        return true;
+    }
+
+    const allowedStatuses =
+        STATUS_TRANSITIONS[currentStatus] || [];
+
+    return allowedStatuses.includes(
+        newStatus
+    );
+};
+
+
+module.exports = {
+
+    STATUS_TRANSITIONS,
+
+    isValidStatusTransition
+
+};
