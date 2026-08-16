@@ -1,13 +1,30 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
+
 import Dashboard from './components/Dashboard'
 import Shipments from './components/Shipments'
 import BackgroundSurface from './components/BackgroundSurface'
 
-const NAV = [
-  { key: 'dashboard', label: 'Analytics' },
-  { key: 'shipments', label: 'Shipments' }
-]
+import AuthView from './views/AuthView'
+import NotificationsView from './views/NotificationsView'
+import CarriersView from './views/CarriersView'
+import UsersView from './views/UsersView'
+import AuditLogView from './views/AuditLogView'
+import SettingsView from './views/SettingsView'
+import ApprovalsView from './views/ApprovalsView'
+
+import { useAuth } from './lib/auth'
+import { useNotifications } from './lib/notifications'
+import { FullPageLoader } from './components/States'
+import { useToast } from './components/Toast'
+
+/**
+ * Application shell.
+ *
+ * Navigation is filtered by role so the sidebar mirrors backend authorisation
+ * exactly: customers never see fleet analytics or admin tooling, and
+ * ADMIN-only destinations stay hidden from OPERATIONS.
+ */
 
 const containerVariant = {
   hidden: {},
@@ -16,167 +33,210 @@ const containerVariant = {
 
 const panelVariant = {
   hidden: { y: 18, opacity: 0 },
-  show: { y: 0, opacity: 1, transition: { duration: 0.6, ease: [0.16,1,0.3,1] } }
+  show: { y: 0, opacity: 1, transition: { duration: 0.6, ease: [0.16, 1, 0.3, 1] } }
 }
 
-const DEMO_LOGIN = {
-  email: 'admin@supplychain.local',
-  password: 'Admin123!'
-}
+// roles: which roles may see the destination. undefined = everyone.
+const NAV_ITEMS = [
+  { key: 'dashboard', label: 'Analytics', roles: ['ADMIN', 'OPERATIONS'] },
+  { key: 'shipments', label: 'Shipments' },
+  { key: 'approvals', label: 'Approvals', roles: ['ADMIN', 'OPERATIONS'] },
+  { key: 'notifications', label: 'Notifications' },
+  { key: 'carriers', label: 'Carriers', roles: ['ADMIN', 'OPERATIONS'] },
+  { key: 'users', label: 'Users', roles: ['ADMIN'] },
+  { key: 'audit', label: 'Audit Log', roles: ['ADMIN'] },
+  { key: 'settings', label: 'Settings' }
+]
 
-const getAuthHeaders = (token) => ({
-  'Content-Type': 'application/json',
-  ...(token ? { Authorization: `Bearer ${token}` } : {})
-})
+function AppShell() {
+  const { user, role, logout, isStaff } = useAuth()
+  const { unreadCount } = useNotifications()
+  const toast = useToast()
 
-async function readJson(url, options = {}) {
-  const response = await fetch(url, options)
-  const payload = await response.json().catch(() => ({}))
-  if (!response.ok) {
-    throw new Error(payload.message || 'Request failed')
-  }
-  return payload
-}
+  const navigation = useMemo(
+    () => NAV_ITEMS.filter((item) => !item.roles || item.roles.includes(role)),
+    [role]
+  )
 
-export default function App(){
-  const [view, setView] = useState('dashboard')
-  const [token, setToken] = useState(() => localStorage.getItem('supplychain_token') || '')
-  const [dashboardSummary, setDashboardSummary] = useState(null)
-  const [onTimeRate, setOnTimeRate] = useState(null)
-  const [trendData, setTrendData] = useState(null)
-  const [shipments, setShipments] = useState([])
-  const [loading, setLoading] = useState(false)
+  // Customers land on Shipments because fleet analytics is staff-only.
+  const [view, setView] = useState(() => (isStaff ? 'dashboard' : 'shipments'))
+  const [menuOpen, setMenuOpen] = useState(false)
   const navRef = useRef(null)
-  const activeIndex = NAV.findIndex(n => n.key === view)
+
+  // Keep the active view legal if the role ever changes.
+  useEffect(() => {
+    if (!navigation.some((item) => item.key === view)) {
+      setView(navigation[0]?.key || 'shipments')
+    }
+  }, [navigation, view])
 
   useEffect(() => {
-    document.title = 'SupplyChain Notification Hub — Premium'
+    document.title = 'SupplyChain Notification Hub'
   }, [])
 
-  useEffect(() => {
-    let alive = true
+  const activeIndex = navigation.findIndex((item) => item.key === view)
 
-    const bootstrap = async () => {
-      try {
-        setLoading(true)
-        let authToken = token
+  const go = (key) => {
+    setView(key)
+    setMenuOpen(false)
+  }
 
-        if (!authToken) {
-          const authResponse = await readJson('/api/auth/login', {
-            method: 'POST',
-            headers: getAuthHeaders(),
-            body: JSON.stringify(DEMO_LOGIN)
-          })
-          authToken = authResponse.token
-          localStorage.setItem('supplychain_token', authToken)
-          setToken(authToken)
-        }
-
-        if (!alive) return
-
-        const [summary, onTime, trend, shipmentData] = await Promise.all([
-          readJson('/api/dashboard/summary', { headers: getAuthHeaders(authToken) }),
-          readJson('/api/dashboard/on-time-rate', { headers: getAuthHeaders(authToken) }),
-          readJson('/api/dashboard/deliveries-over-time?interval=day&range=30d', { headers: getAuthHeaders(authToken) }),
-          readJson('/api/shipments?limit=25', { headers: getAuthHeaders(authToken) })
-        ])
-
-        if (!alive) return
-
-        setDashboardSummary(summary.data || {})
-        setOnTimeRate(onTime.data || {})
-        setTrendData(trend.data || [])
-        setShipments(shipmentData.data || [])
-      } catch (error) {
-        console.error('Failed to load live dashboard data:', error)
-      } finally {
-        if (alive) setLoading(false)
-      }
-    }
-
-    bootstrap()
-    return () => { alive = false }
-  }, [token])
-
-  const runDelayDetector = async () => {
-    try {
-      const authToken = token || localStorage.getItem('supplychain_token')
-      const resp = await fetch('/api/jobs/delay-detection', {
-        method: 'POST',
-        headers: getAuthHeaders(authToken),
-        body: JSON.stringify({ dryRun: false })
-      })
-
-      const payload = await resp.json()
-      if (resp.ok) {
-        console.log('Delay detector run:', payload)
-        alert(`Delay detector executed: ${payload.data?.delayed_count || 0} flagged.`)
-      } else {
-        console.error('Delay detector failed:', payload)
-        alert(`Delay detector failed: ${payload.message || 'see console'}`)
-      }
-    } catch (err) {
-      console.error('Network error running delay detector', err)
-      alert('Network error running delay detector; see console.')
-    }
+  const handleLogout = async () => {
+    await logout()
+    toast.info('Signed out.')
   }
 
   return (
     <div className="min-h-screen bg-[var(--surface)] body-font text-zinc-100">
       <BackgroundSurface />
-      <motion.div initial="hidden" animate="show" variants={containerVariant} className="content-layer max-w-[1200px] mx-auto px-6 py-8">
-        <header className="flex items-start justify-between gap-6 mb-6">
-          <div>
-            <div className="hdr text-2xl font-semibold">SupplyChain Notification Hub</div>
-            <div className="text-sm text-zinc-400 mt-1">Telemetry · Transit risk · Notifications</div>
+
+      <motion.div
+        initial="hidden"
+        animate="show"
+        variants={containerVariant}
+        className="content-layer max-w-[1200px] mx-auto px-6 py-8"
+      >
+        <header
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: 20,
+            marginBottom: 24,
+            flexWrap: 'wrap'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button
+              type="button"
+              className="btn btn-sm mobile-only"
+              onClick={() => setMenuOpen(true)}
+              aria-label="Open navigation"
+            >
+              Menu
+            </button>
+
+            <div>
+              <div className="hdr text-2xl font-semibold">
+                SupplyChain Notification Hub
+              </div>
+              <div className="eyebrow" style={{ marginTop: 4 }}>
+                Telemetry · Transit risk · Notifications
+              </div>
+            </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="text-sm text-zinc-300">Ops • Elena Rostova</div>
-            <div className="px-3 py-2 border rule rounded-md text-sm text-zinc-300">ENV: Demo</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={() => go('notifications')}
+              aria-label={`Notifications, ${unreadCount} unread`}
+            >
+              Notifications
+              {unreadCount > 0 && (
+                <span className="count-badge" style={{ marginLeft: 2 }}>
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
+            </button>
+
+            <div style={{ textAlign: 'right' }}>
+              <div className="body-text" style={{ fontWeight: 600 }}>
+                {user?.name}
+              </div>
+              <div className="eyebrow">{role}</div>
+            </div>
+
+            <button type="button" className="btn btn-sm" onClick={handleLogout}>
+              Sign out
+            </button>
           </div>
         </header>
 
-        <div className="grid grid-cols-[220px_1fr] gap-6">
-          <nav className="pt-2 relative" ref={navRef}>
-            <div style={{position: 'absolute', top: `${18 + activeIndex * 44}px`}} className="nav-marker" aria-hidden />
-            <ul className="space-y-2">
-              {NAV.map(item => (
-                <li key={item.key}>
-                  <motion.button
-                    onClick={() => setView(item.key)}
-                    initial={{ opacity: 0, x: -6 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.5 }}
-                    className={`w-full text-left px-3 py-2 text-sm underline-grow ${view===item.key? 'text-zinc-100 font-semibold nav-active':'text-zinc-400'} clickable`}
-                  >
-                    {item.label}
-                  </motion.button>
-                </li>
-              ))}
-            </ul>
+        <div className="app-shell-grid">
+          {menuOpen && (
+            <div
+              className="sidebar-scrim mobile-only"
+              onClick={() => setMenuOpen(false)}
+              aria-hidden
+            />
+          )}
 
-            <div className="mt-6 pt-4 border-t rule">
-              <div className="text-xs text-slate-500 mb-2">Quick Actions</div>
-              <motion.button whileTap={{ scale: 0.98 }} onClick={runDelayDetector} className="w-full text-left px-3 py-2 text-sm border rule rounded-md clickable btn-pulse conic-glow">Run Delay Detector</motion.button>
-            </div>
+          <nav
+            className={`app-sidebar pt-2 relative${menuOpen ? ' is-open' : ''}`}
+            ref={navRef}
+            aria-label="Primary"
+          >
+            {activeIndex >= 0 && (
+              <div
+                style={{ position: 'absolute', top: `${18 + activeIndex * 40}px`, height: 22 }}
+                className="nav-marker"
+                aria-hidden
+              />
+            )}
+
+            <ul style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {navigation.map((item) => {
+                const isActive = view === item.key
+
+                return (
+                  <li key={item.key}>
+                    <button
+                      type="button"
+                      onClick={() => go(item.key)}
+                      aria-current={isActive ? 'page' : undefined}
+                      className={`w-full text-left px-3 py-2 underline-grow clickable nav-item-text${
+                        isActive ? ' is-active nav-active' : ''
+                      }`}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: isActive ? '#ffffff' : '#a1a1aa',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 8
+                      }}
+                    >
+                      <span>{item.label}</span>
+                      {item.key === 'notifications' && unreadCount > 0 && (
+                        <span className="count-badge">
+                          {unreadCount > 99 ? '99+' : unreadCount}
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
           </nav>
 
           <main>
-            <motion.div variants={panelVariant} className="">
-              {view === 'dashboard' && (
-                <Dashboard
-                  summary={dashboardSummary}
-                  onTime={onTimeRate}
-                  trendData={trendData}
-                  loading={loading}
-                />
-              )}
-              {view === 'shipments' && <Shipments rows={shipments} loading={loading} />}
+            <motion.div variants={panelVariant}>
+              {view === 'dashboard' && <Dashboard />}
+              {view === 'shipments' && <Shipments />}
+              {view === 'approvals' && <ApprovalsView />}
+              {view === 'notifications' && <NotificationsView />}
+              {view === 'carriers' && <CarriersView />}
+              {view === 'users' && <UsersView />}
+              {view === 'audit' && <AuditLogView />}
+              {view === 'settings' && <SettingsView />}
             </motion.div>
           </main>
         </div>
       </motion.div>
     </div>
   )
+}
+
+export default function App() {
+  const { isAuthenticated, initialising } = useAuth()
+
+  if (initialising) {
+    return <FullPageLoader label="Restoring session" />
+  }
+
+  return isAuthenticated ? <AppShell /> : <AuthView />
 }

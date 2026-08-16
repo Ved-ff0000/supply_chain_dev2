@@ -12,6 +12,13 @@ export default function BackgroundSurface(){
     ref.current = canvas
     const ctx = canvas.getContext('2d')
 
+    // Headless/unsupported environments can return null; the decorative
+    // backdrop is optional, so bail out rather than throwing.
+    if (!ctx) {
+      canvas.remove()
+      return undefined
+    }
+
     let width = 0, height = 0
     const devicePixelRatio = window.devicePixelRatio || 1
 

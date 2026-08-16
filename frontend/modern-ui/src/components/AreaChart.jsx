@@ -22,7 +22,9 @@ export default function AreaChart({ className, data }) {
   const svgRef = useRef(null)
   const [hover, setHover] = useState({ x: -9999, y: -9999 })
 
-  const samples = Array.isArray(data) && data.length ? data : [14, 21, 18, 25, 29, 34]
+  // Data is always supplied by the caller from live aggregation; the chart is
+  // never rendered with placeholder numbers (callers show an empty state).
+  const samples = Array.isArray(data) && data.length ? data : []
   const width = 720
   const height = 240
   const padding = { left: 40, right: 20 }
