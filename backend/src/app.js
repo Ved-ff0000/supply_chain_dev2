@@ -17,6 +17,7 @@ const notificationPreferenceRoutes =
 const userRoutes = require("./routes/userRoutes");
 const auditLogRoutes = require("./routes/auditLogRoutes");
 const jobRoutes = require("./routes/jobRoutes");
+const filterRoutes = require("./routes/filterRoutes");
 
 
 // ======================================================
@@ -198,6 +199,24 @@ app.use(
 app.use(
     "/api/jobs",
     jobRoutes
+);
+
+
+// ======================================================
+// SAVED SHIPMENT FILTERS
+// ======================================================
+//
+// GET    /api/filters
+// POST   /api/filters
+// GET    /api/filters/:id
+// PATCH  /api/filters/:id
+// DELETE /api/filters/:id
+//
+// ======================================================
+
+app.use(
+    "/api/filters",
+    filterRoutes
 );
 
 

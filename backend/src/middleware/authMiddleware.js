@@ -11,22 +11,34 @@ const authenticateToken = async (req, res, next) => {
 
         const authHeader = req.headers.authorization;
 
-        if (!authHeader) {
+        let token = null;
+
+        if (authHeader) {
+
+            if (!authHeader.startsWith("Bearer ")) {
+                return res.status(401).json({
+                    success: false,
+                    message:
+                        "Invalid authorization format. Use Bearer <token>"
+                });
+            }
+
+            token = authHeader.substring(7).trim();
+
+        } else if (req.query && req.query.token) {
+
+            // The browser EventSource API cannot attach custom headers, so
+            // SSE subscribers pass the access token as a query parameter.
+            token = String(req.query.token).trim();
+
+        } else {
+
             return res.status(401).json({
                 success: false,
                 message: "Authorization header is required"
             });
-        }
 
-        if (!authHeader.startsWith("Bearer ")) {
-            return res.status(401).json({
-                success: false,
-                message:
-                    "Invalid authorization format. Use Bearer <token>"
-            });
         }
-
-        const token = authHeader.substring(7).trim();
 
         if (!token) {
             return res.status(401).json({

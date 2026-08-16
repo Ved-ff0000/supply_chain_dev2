@@ -14,7 +14,8 @@ const {
     markNotificationAsRead,
     markAllNotificationsAsRead,
     deleteNotification,
-    getShipmentNotifications
+    getShipmentNotifications,
+    streamNotifications
 } = require("../controllers/notificationController");
 
 
@@ -53,6 +54,24 @@ router.use(authenticateToken);
 router.get(
     "/",
     getAllNotifications
+);
+
+
+// ======================================================
+// LIVE STREAM (SSE)
+// ======================================================
+//
+// GET /api/notifications/stream
+//
+// IMPORTANT:
+// This route comes before /:id, otherwise "stream" would be parsed as a
+// notification id and fail integer conversion.
+//
+// ======================================================
+
+router.get(
+    "/stream",
+    streamNotifications
 );
 
 

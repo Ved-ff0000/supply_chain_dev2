@@ -9,6 +9,17 @@ const {
 
 const STATUS_TRANSITIONS = {
 
+    // A customer-submitted request. OPERATIONS/ADMIN either approve it into
+    // the normal lifecycle (CREATED) or reject it (CANCELLED).
+    [SHIPMENT_STATUS.PENDING_APPROVAL]: [
+
+        SHIPMENT_STATUS.CREATED,
+
+        SHIPMENT_STATUS.CANCELLED
+
+    ],
+
+
     [SHIPMENT_STATUS.CREATED]: [
 
         SHIPMENT_STATUS.PICKED_UP,

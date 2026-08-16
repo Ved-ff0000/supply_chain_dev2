@@ -4,6 +4,7 @@ const router = express.Router();
 
 const shipmentController = require("../controllers/shipmentController");
 const etaController = require("../controllers/etaController");
+const shipmentRequestController = require("../controllers/shipmentRequestController");
 
 const {
     authenticateToken,
@@ -12,11 +13,49 @@ const {
 
 router.use(authenticateToken);
 
+
+// ======================================================
+// COLLECTION
+// ======================================================
+
 // GET /api/shipments
 router.get(
     "/",
     authorizeRoles("CUSTOMER", "OPERATIONS", "ADMIN"),
     shipmentController.getAllShipments
+);
+
+
+// ======================================================
+// STATIC PATHS
+// ======================================================
+//
+// IMPORTANT:
+// Every literal path below must be declared before the "/:id" routes,
+// otherwise Express matches "bulk-status" / "request" as an :id and the
+// handler fails converting it to an integer.
+//
+// ======================================================
+
+// PATCH /api/shipments/bulk-status  (Feature 8)
+router.patch(
+    "/bulk-status",
+    authorizeRoles("OPERATIONS", "ADMIN"),
+    shipmentController.bulkUpdateShipmentStatus
+);
+
+// POST /api/shipments/request  (Feature 6)
+router.post(
+    "/request",
+    authorizeRoles("CUSTOMER", "OPERATIONS", "ADMIN"),
+    shipmentRequestController.createShipmentRequest
+);
+
+// GET /api/shipments/requests/pending
+router.get(
+    "/requests/pending",
+    authorizeRoles("CUSTOMER", "OPERATIONS", "ADMIN"),
+    shipmentRequestController.getPendingRequests
 );
 
 // GET /api/shipments/tracking/:trackingNumber
@@ -25,6 +64,11 @@ router.get(
     authorizeRoles("CUSTOMER", "OPERATIONS", "ADMIN"),
     shipmentController.getShipmentByTrackingNumber
 );
+
+
+// ======================================================
+// SINGLE SHIPMENT
+// ======================================================
 
 // GET /api/shipments/:id/eta
 router.get(
@@ -47,6 +91,20 @@ router.post(
     shipmentController.createShipment
 );
 
+// POST /api/shipments/:id/approve  (Feature 6)
+router.post(
+    "/:id/approve",
+    authorizeRoles("OPERATIONS", "ADMIN"),
+    shipmentRequestController.approveShipmentRequest
+);
+
+// POST /api/shipments/:id/reject  (Feature 6)
+router.post(
+    "/:id/reject",
+    authorizeRoles("OPERATIONS", "ADMIN"),
+    shipmentRequestController.rejectShipmentRequest
+);
+
 // PATCH /api/shipments/:id/status
 router.patch(
     "/:id/status",
@@ -61,7 +119,7 @@ router.patch(
     shipmentController.updateShipment
 );
 
-// DELETE /api/shipments/:id
+// DELETE /api/shipments/:id  (soft delete)
 router.delete(
     "/:id",
     authorizeRoles("ADMIN"),

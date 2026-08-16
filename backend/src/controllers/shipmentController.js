@@ -17,6 +17,10 @@ const {
     logAuditEvent
 } = require("../services/auditService");
 
+const {
+    applyBulkStatusChange
+} = require("../services/statusChangeService");
+
 
 // ======================================================
 // GET ALL SHIPMENTS
@@ -1199,6 +1203,103 @@ const updateShipmentStatus = async (
 
 
 // ======================================================
+// BULK STATUS UPDATE (FEATURE 8)
+// ======================================================
+//
+// PATCH /api/shipments/bulk-status
+//
+// Body:
+//
+// {
+//     "shipment_ids": [1, 2, 3],
+//     "status": "IN_TRANSIT"
+// }
+//
+// Delegates to the shared status pipeline, so validation, events, audit
+// entries and notifications behave exactly as they do for a single update.
+// Shipments that cannot legally transition are reported rather than
+// aborting the whole batch.
+//
+// ======================================================
+
+const bulkUpdateShipmentStatus = async (req, res) => {
+
+    try {
+
+        const {
+            shipment_ids,
+            status,
+            description
+        } = req.body || {};
+
+
+        if (!status) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                message: "status is required"
+
+            });
+
+        }
+
+
+        const result =
+            await applyBulkStatusChange({
+                shipmentIds: shipment_ids,
+                status,
+                changedBy: req.user ? req.user.id : null,
+                description
+            });
+
+
+        // 207 conveys a partially successful batch.
+        const statusCode =
+            result.failed_count > 0 && result.updated_count > 0
+                ? 207
+                : result.updated_count === 0 && result.failed_count > 0
+                    ? 400
+                    : 200;
+
+
+        return res.status(statusCode).json({
+
+            success: result.failed_count === 0,
+
+            message:
+                `${result.updated_count} shipment(s) updated, ` +
+                `${result.skipped_count} unchanged, ` +
+                `${result.failed_count} failed`,
+
+            data: result
+
+        });
+
+    } catch (error) {
+
+        console.error(
+            "Error performing bulk status update:",
+            error
+        );
+
+
+        return res.status(error.statusCode || 500).json({
+
+            success: false,
+
+            message:
+                error.message || "Failed to perform bulk status update"
+
+        });
+
+    }
+
+};
+
+
+// ======================================================
 // UPDATE SHIPMENT
 // ======================================================
 //
@@ -1540,6 +1641,8 @@ module.exports = {
     updateShipmentStatus,
 
     updateShipment,
+
+    bulkUpdateShipmentStatus,
 
     deleteShipment
 

@@ -9,7 +9,11 @@ const {
     getDeliveriesOverTime,
     getAvgTransitTime,
     getOnTimeRate,
-    getCustomsHoldFrequency
+    getCustomsHoldFrequency,
+    getActiveShipmentsCount,
+    getDelays24h,
+    getUnreadNotificationsCount,
+    exportDashboardCsv
 } = require("../controllers/dashboardController");
 
 const {
@@ -21,139 +25,125 @@ const {
 const router = express.Router();
 
 
+// All dashboard endpoints require a signed-in user.
+router.use(authenticateToken);
+
+
 // ======================================================
-// DASHBOARD SUMMARY
+// STAFF-ONLY FLEET ANALYTICS
+// ======================================================
+//
+// These aggregate across every customer, so they stay restricted.
+//
 // ======================================================
 
 router.get(
     "/summary",
-    authenticateToken,
-    authorizeRoles(
-        "OPERATIONS",
-        "ADMIN"
-    ),
+    authorizeRoles("OPERATIONS", "ADMIN"),
     getDashboardSummary
 );
 
-
-// ======================================================
-// SHIPMENTS BY STATUS
-// ======================================================
-
 router.get(
     "/shipments/status",
-    authenticateToken,
-    authorizeRoles(
-        "OPERATIONS",
-        "ADMIN"
-    ),
+    authorizeRoles("OPERATIONS", "ADMIN"),
     getShipmentsByStatus
 );
 
-
-// ======================================================
-// SHIPMENTS BY PRIORITY
-// ======================================================
-
 router.get(
     "/shipments/priority",
-    authenticateToken,
-    authorizeRoles(
-        "OPERATIONS",
-        "ADMIN"
-    ),
+    authorizeRoles("OPERATIONS", "ADMIN"),
     getShipmentsByPriority
 );
 
-
-// ======================================================
-// SHIPMENTS BY CARRIER
-// ======================================================
-
 router.get(
     "/shipments/carriers",
-    authenticateToken,
-    authorizeRoles(
-        "OPERATIONS",
-        "ADMIN"
-    ),
+    authorizeRoles("OPERATIONS", "ADMIN"),
     getShipmentsByCarrier
 );
 
-
-// ======================================================
-// RECENT SHIPMENTS
-// ======================================================
-
 router.get(
     "/recent-shipments",
-    authenticateToken,
-    authorizeRoles(
-        "OPERATIONS",
-        "ADMIN"
-    ),
+    authorizeRoles("OPERATIONS", "ADMIN"),
     getRecentShipments
+);
+
+router.get(
+    "/customs-hold-frequency",
+    authorizeRoles("OPERATIONS", "ADMIN"),
+    getCustomsHoldFrequency
 );
 
 
 // ======================================================
-// DELIVERIES OVER TIME (TIME-SERIES)
+// ROLE-SCOPED ANALYTICS
+// ======================================================
+//
+// Customers may read these; the controller narrows every query to their own
+// customer_id, so the same endpoint safely powers both dashboards.
+//
 // ======================================================
 
 router.get(
     "/deliveries-over-time",
-    authenticateToken,
-    authorizeRoles(
-        "OPERATIONS",
-        "ADMIN"
-    ),
+    authorizeRoles("CUSTOMER", "OPERATIONS", "ADMIN"),
     getDeliveriesOverTime
 );
 
-
-// ======================================================
-// AVERAGE TRANSIT TIME BY CARRIER
-// ======================================================
-
 router.get(
     "/avg-transit-time",
-    authenticateToken,
-    authorizeRoles(
-        "OPERATIONS",
-        "ADMIN"
-    ),
+    authorizeRoles("CUSTOMER", "OPERATIONS", "ADMIN"),
     getAvgTransitTime
 );
 
-
-// ======================================================
-// ON-TIME DELIVERY RATE
-// ======================================================
-
 router.get(
     "/on-time-rate",
-    authenticateToken,
-    authorizeRoles(
-        "OPERATIONS",
-        "ADMIN"
-    ),
+    authorizeRoles("CUSTOMER", "OPERATIONS", "ADMIN"),
     getOnTimeRate
 );
 
 
 // ======================================================
-// CUSTOMS HOLD FREQUENCY
+// KPI CARD ENDPOINTS
+// ======================================================
+//
+// GET /api/dashboard/active-shipments-count
+// GET /api/dashboard/delays-24h
+// GET /api/dashboard/unread-notifications-count
+//
 // ======================================================
 
 router.get(
-    "/customs-hold-frequency",
-    authenticateToken,
-    authorizeRoles(
-        "OPERATIONS",
-        "ADMIN"
-    ),
-    getCustomsHoldFrequency
+    "/active-shipments-count",
+    authorizeRoles("CUSTOMER", "OPERATIONS", "ADMIN"),
+    getActiveShipmentsCount
+);
+
+router.get(
+    "/delays-24h",
+    authorizeRoles("CUSTOMER", "OPERATIONS", "ADMIN"),
+    getDelays24h
+);
+
+router.get(
+    "/unread-notifications-count",
+    authorizeRoles("CUSTOMER", "OPERATIONS", "ADMIN"),
+    getUnreadNotificationsCount
 );
 
 
-module.exports = router;
+// ======================================================
+// CSV EXPORT
+// ======================================================
+//
+// GET /api/dashboard/export?dataset=deliveries&range=30d
+//
+// ======================================================
+
+router.get(
+    "/export",
+    authorizeRoles("CUSTOMER", "OPERATIONS", "ADMIN"),
+    exportDashboardCsv
+);
+
+
+module.exports = router;

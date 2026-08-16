@@ -1,5 +1,7 @@
 const pool = require("../config/database");
 
+const { addClient } = require("../services/realtimeService");
+
 
 // ======================================================
 // GET ALL NOTIFICATIONS
@@ -440,6 +442,11 @@ const getUnreadNotificationCount = async (
 
     try {
 
+        const isStaff =
+            req.user.role === "ADMIN" ||
+            req.user.role === "OPERATIONS";
+
+
         let customerId =
             req.user.customer_id;
 
@@ -447,29 +454,33 @@ const getUnreadNotificationCount = async (
         // ==================================================
         // ADMIN / OPERATIONS
         // ==================================================
+        //
+        // Staff may scope the count to one customer via ?customer_id.
+        // Without that parameter they see the fleet-wide unread total,
+        // which is what the "Unread Notifications" KPI card reads.
 
-        if (
-            (
-                req.user.role === "ADMIN" ||
-                req.user.role === "OPERATIONS"
-            ) &&
-            req.query.customer_id
-        ) {
+        if (isStaff && req.query.customer_id) {
 
             customerId =
-                req.query.customer_id;
+                Number(req.query.customer_id);
+
+        } else if (isStaff) {
+
+            customerId = null;
 
         }
 
 
-        if (!customerId) {
+        // A CUSTOMER account with no linked customer record has nothing
+        // to count; that is an empty inbox, not a bad request.
 
-            return res.status(400).json({
+        if (!isStaff && !customerId) {
 
-                success: false,
+            return res.status(200).json({
 
-                message:
-                    "Customer ID is required"
+                success: true,
+
+                unread_count: 0
 
             });
 
@@ -484,11 +495,14 @@ const getUnreadNotificationCount = async (
 
                 FROM notifications
 
-                WHERE customer_id = $1
+                WHERE status = 'UNREAD'
 
-                AND status = 'UNREAD'
+                  AND (
+                        $1::integer IS NULL
+                        OR customer_id = $1::integer
+                      )
                 `,
-                [customerId]
+                [customerId || null]
             );
 
 
@@ -1096,6 +1110,49 @@ const getShipmentNotifications = async (
 
 
 // ======================================================
+// LIVE NOTIFICATION STREAM (SSE)
+// ======================================================
+//
+// GET /api/notifications/stream
+//
+// EventSource cannot set an Authorization header, so this endpoint also
+// accepts the access token via ?token=. The connection is held open until
+// the client disconnects.
+//
+// ======================================================
+
+const streamNotifications = async (req, res) => {
+
+    try {
+
+        addClient(req, res, req.user);
+
+    } catch (error) {
+
+        console.error(
+            "Notification stream error:",
+            error
+        );
+
+
+        if (!res.headersSent) {
+
+            return res.status(500).json({
+
+                success: false,
+
+                message: "Failed to open notification stream"
+
+            });
+
+        }
+
+    }
+
+};
+
+
+// ======================================================
 // EXPORT
 // ======================================================
 
@@ -1113,6 +1170,8 @@ module.exports = {
 
     deleteNotification,
 
-    getShipmentNotifications
+    getShipmentNotifications,
+
+    streamNotifications
 
 };

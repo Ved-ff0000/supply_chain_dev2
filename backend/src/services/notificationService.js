@@ -2,6 +2,7 @@
 const pool = require("../config/database");
 const { sendShipmentNotificationEmail } = require("./emailService");
 const { sendWebhookNotification } = require("./webhookService");
+const { publishNotification } = require("./realtimeService");
 
 
 // ======================================================
@@ -261,6 +262,29 @@ const createShipmentNotification = async ({
 
             const createdNotification =
                 notificationResult.rows[0];
+
+            // ==================================================
+            // LIVE IN-APP PUSH (SSE)
+            // ==================================================
+            //
+            // Every notification in the system is created here, so this is
+            // the one place that needs to fan out to connected clients.
+
+            try {
+
+                publishNotification({
+                    ...createdNotification,
+                    tracking_number: shipment.tracking_number
+                });
+
+            } catch (realtimeError) {
+
+                console.error(
+                    "[NotificationService] Realtime push failed:",
+                    realtimeError.message
+                );
+
+            }
 
             // ==================================================
             // REAL EMAIL DELIVERY (IF ENABLED)

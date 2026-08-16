@@ -1,22 +1,14 @@
--- Migration: Session management, password reset, and filters tables
-
--- ============================================
--- SESSIONS TABLE
--- ============================================
-
-CREATE TABLE IF NOT EXISTS sessions (
-    id              SERIAL PRIMARY KEY,
-    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    refresh_token   VARCHAR(500) NOT NULL UNIQUE,
-    user_agent      VARCHAR(500),
-    ip_address      VARCHAR(50),
-    expires_at      TIMESTAMP NOT NULL,
-    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions (user_id);
-CREATE INDEX IF NOT EXISTS idx_sessions_refresh_token ON sessions (refresh_token);
-CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions (expires_at);
+-- Migration: Password reset tokens and saved shipment filters
+--
+-- NOTE: This file previously also created a `sessions` table whose columns
+-- conflicted with the `sessions` table created by
+-- 20260816_add_sessions_refresh_tokens.sql (refresh_token vs refresh_token_hash),
+-- which made a clean install fail with:
+--     column "refresh_token" does not exist
+--
+-- Session table ownership now lives in a single place:
+-- 20260817_auth_hardening_and_features.sql reconciles it. This file only
+-- creates the tables it uniquely owns.
 
 -- ============================================
 -- PASSWORD RESET TOKENS
