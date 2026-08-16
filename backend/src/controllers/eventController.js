@@ -1,14 +1,17 @@
 
 const pool = require("../config/database");
 
-
-// ======================================================
-// NOTIFICATION ENGINE
-// ======================================================
-
 const {
     processShipmentEvent
 } = require("../services/notificationEngine");
+
+const {
+    isValidStatusTransition
+} = require("../constants/statusTransitions");
+
+const {
+    logAuditEvent
+} = require("../services/auditService");
 
 
 // ======================================================
@@ -40,6 +43,7 @@ const getShipmentEvents = async (req, res) => {
                     status
                 FROM shipments
                 WHERE id = $1
+                  AND is_deleted = FALSE
                 `,
                 [shipmentId]
             );
@@ -78,6 +82,7 @@ const getShipmentEvents = async (req, res) => {
                     created_at
                 FROM shipment_events
                 WHERE shipment_id = $1
+                  AND is_deleted = FALSE
                 ORDER BY event_time ASC
                 `,
                 [shipmentId]
@@ -155,6 +160,7 @@ const getLatestShipmentEvent =
                         created_at
                     FROM shipment_events
                     WHERE shipment_id = $1
+                      AND is_deleted = FALSE
                     ORDER BY event_time DESC
                     LIMIT 1
                     `,
@@ -303,6 +309,7 @@ const createShipmentEvent =
                         actual_delivery
                     FROM shipments
                     WHERE id = $1
+                      AND is_deleted = FALSE
                     `,
                     [shipmentId]
                 );
@@ -326,6 +333,26 @@ const createShipmentEvent =
 
             const shipment =
                 shipmentResult.rows[0];
+
+
+            if (
+                shipment.status !== normalizedStatus &&
+                !isValidStatusTransition(
+                    shipment.status,
+                    normalizedStatus
+                )
+            ) {
+
+                return res.status(400).json({
+
+                    success: false,
+
+                    message:
+                        `Invalid status transition from ${shipment.status} to ${normalizedStatus}`
+
+                });
+
+            }
 
 
             // ==================================================
@@ -451,6 +478,20 @@ const createShipmentEvent =
                     ]
                 );
 
+
+            // ==================================================
+            // AUDIT LOG
+            // ==================================================
+
+            await logAuditEvent({
+                entityType: "SHIPMENT_EVENT",
+                entityId: eventResult.rows[0].id,
+                action: "CREATE",
+                changedBy: req.user?.id || null,
+                oldValue: null,
+                newValue: eventResult.rows[0],
+                client
+            });
 
             // ==================================================
             // COMMIT TRANSACTION
@@ -593,53 +634,88 @@ const deleteShipmentEvent =
                 req.params;
 
 
-            const result =
-                await pool.query(
-                    `
-                    DELETE FROM shipment_events
+        const currentResult = await pool.query(
+            `
+            SELECT id, shipment_id, status, location, description, event_time
+            FROM shipment_events
+            WHERE id = $1 AND is_deleted = FALSE
+            `,
+            [eventId]
+        );
 
-                    WHERE id = $1
+        if (currentResult.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "Shipment event not found"
+            });
+        }
 
-                    RETURNING
-                        id,
-                        shipment_id,
-                        status,
-                        location,
-                        description,
-                        event_time,
-                        created_at
-                    `,
-                    [eventId]
-                );
+        const currentEvent = currentResult.rows[0];
 
+        const result =
+            await pool.query(
+                `
+                UPDATE shipment_events
+                SET is_deleted = TRUE,
+                    deleted_at = CURRENT_TIMESTAMP,
+                    deleted_by = $1
+                WHERE id = $2
+                  AND is_deleted = FALSE
+                RETURNING
+                    id,
+                    shipment_id,
+                    status,
+                    location,
+                    description,
+                    is_deleted,
+                    deleted_at,
+                    deleted_by
+                `,
+                [
+                    req.user?.id || null,
+                    eventId
+                ]
+            );
 
-            if (
-                result.rows.length === 0
-            ) {
+        if (
+            result.rows.length === 0
+        ) {
 
-                return res.status(404).json({
+            return res.status(404).json({
 
-                    success: false,
-
-                    message:
-                        "Shipment event not found"
-
-                });
-
-            }
-
-
-            return res.status(200).json({
-
-                success: true,
+                success: false,
 
                 message:
-                    "Shipment event deleted successfully",
-
-                data:
-                    result.rows[0]
+                    "Shipment event not found"
 
             });
+
+        }
+
+        // ==================================================
+        // AUDIT LOG
+        // ==================================================
+
+        await logAuditEvent({
+            entityType: "SHIPMENT_EVENT",
+            entityId: eventId,
+            action: "SOFT_DELETE",
+            changedBy: req.user?.id || null,
+            oldValue: currentEvent,
+            newValue: result.rows[0]
+        });
+
+        return res.status(200).json({
+
+            success: true,
+
+            message:
+                "Shipment event soft-deleted successfully",
+
+            data:
+                result.rows[0]
+
+        });
 
 
         } catch (error) {

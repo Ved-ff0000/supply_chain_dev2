@@ -1,93 +1,81 @@
 const jwt = require("jsonwebtoken");
+const pool = require("../config/database");
 
 // ======================================================
 // AUTHENTICATE TOKEN
 // ======================================================
 
-const authenticateToken = (req, res, next) => {
+const authenticateToken = async (req, res, next) => {
 
     try {
-
-        // ----------------------------------------------
-        // Get Authorization Header
-        // ----------------------------------------------
 
         const authHeader = req.headers.authorization;
 
         if (!authHeader) {
-
             return res.status(401).json({
-
                 success: false,
-
-                message:
-                    "Authorization header is required"
-
+                message: "Authorization header is required"
             });
-
         }
-
-
-        // ----------------------------------------------
-        // Check Bearer Format
-        // ----------------------------------------------
 
         if (!authHeader.startsWith("Bearer ")) {
-
             return res.status(401).json({
-
                 success: false,
-
                 message:
                     "Invalid authorization format. Use Bearer <token>"
-
             });
-
         }
 
-
-        // ----------------------------------------------
-        // Extract Token
-        // ----------------------------------------------
-
-        const token =
-            authHeader.substring(7).trim();
-
+        const token = authHeader.substring(7).trim();
 
         if (!token) {
-
             return res.status(401).json({
-
                 success: false,
-
-                message:
-                    "Authentication token is missing"
-
+                message: "Authentication token is missing"
             });
-
         }
-
-
-        // ----------------------------------------------
-        // Verify JWT
-        // ----------------------------------------------
 
         const decoded = jwt.verify(
             token,
             process.env.JWT_SECRET
         );
 
+        const userResult = await pool.query(
+            `
+            SELECT
+                id,
+                email,
+                role,
+                customer_id,
+                is_active
+            FROM users
+            WHERE id = $1
+            `,
+            [decoded.id]
+        );
 
-        // ----------------------------------------------
-        // Store User in Request
-        // ----------------------------------------------
+        if (userResult.rows.length === 0) {
+            return res.status(401).json({
+                success: false,
+                message: "User no longer exists"
+            });
+        }
 
-        req.user = decoded;
+        const user = userResult.rows[0];
 
+        if (!user.is_active) {
+            return res.status(403).json({
+                success: false,
+                message: "User account is inactive"
+            });
+        }
 
-        // ----------------------------------------------
-        // Continue
-        // ----------------------------------------------
+        req.user = {
+            id: user.id,
+            email: user.email,
+            role: String(user.role).toUpperCase(),
+            customer_id: user.customer_id
+        };
 
         next();
 
@@ -98,60 +86,23 @@ const authenticateToken = (req, res, next) => {
             error.message
         );
 
-
-        // ----------------------------------------------
-        // Expired Token
-        // ----------------------------------------------
-
-        if (
-            error.name ===
-            "TokenExpiredError"
-        ) {
-
+        if (error.name === "TokenExpiredError") {
             return res.status(401).json({
-
                 success: false,
-
-                message:
-                    "Authentication token has expired"
-
+                message: "Authentication token has expired"
             });
-
         }
 
-
-        // ----------------------------------------------
-        // Invalid Token
-        // ----------------------------------------------
-
-        if (
-            error.name ===
-            "JsonWebTokenError"
-        ) {
-
+        if (error.name === "JsonWebTokenError") {
             return res.status(401).json({
-
                 success: false,
-
-                message:
-                    "Invalid authentication token"
-
+                message: "Invalid authentication token"
             });
-
         }
-
-
-        // ----------------------------------------------
-        // Other Authentication Error
-        // ----------------------------------------------
 
         return res.status(401).json({
-
             success: false,
-
-            message:
-                "Authentication failed"
-
+            message: "Authentication failed"
         });
 
     }

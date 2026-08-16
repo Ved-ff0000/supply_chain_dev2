@@ -1,5 +1,7 @@
 
 const pool = require("../config/database");
+const { sendShipmentNotificationEmail } = require("./emailService");
+const { sendWebhookNotification } = require("./webhookService");
 
 
 // ======================================================
@@ -91,6 +93,10 @@ const createShipmentNotification = async ({
 
                     webhook_enabled,
 
+                    webhook_url,
+
+                    webhook_secret,
+
                     notify_in_transit,
 
                     notify_customs_hold,
@@ -120,6 +126,10 @@ const createShipmentNotification = async ({
             in_app_enabled: true,
 
             webhook_enabled: false,
+
+            webhook_url: null,
+
+            webhook_secret: null,
 
             notify_in_transit: true,
 
@@ -249,6 +259,45 @@ const createShipmentNotification = async ({
                 );
 
 
+            const createdNotification =
+                notificationResult.rows[0];
+
+            // ==================================================
+            // REAL EMAIL DELIVERY (IF ENABLED)
+            // ==================================================
+
+            if (preferences.email_enabled && shipment.customer_email) {
+                // Fire and forget (non-blocking)
+                sendShipmentNotificationEmail({
+                    to: shipment.customer_email,
+                    customerName: shipment.customer_name,
+                    trackingNumber: shipment.tracking_number,
+                    status: normalizedStatus,
+                    title,
+                    message,
+                    priority: normalizedPriority
+                }).catch(emailErr => {
+                    console.error("[NotificationService] Async email dispatch error:", emailErr.message);
+                });
+            }
+
+            // ==================================================
+            // REAL WEBHOOK DELIVERY (IF ENABLED & URL REGISTERED)
+            // ==================================================
+
+            if (preferences.webhook_enabled && preferences.webhook_url) {
+                // Fire and forget with retry & logging (non-blocking)
+                sendWebhookNotification({
+                    webhookUrl: preferences.webhook_url,
+                    webhookSecret: preferences.webhook_secret,
+                    notification: createdNotification,
+                    customerId: shipment.customer_id,
+                    maxAttempts: 3
+                }).catch(webhookErr => {
+                    console.error("[NotificationService] Async webhook dispatch error:", webhookErr.message);
+                });
+            }
+
             return {
 
                 created: true,
@@ -257,7 +306,12 @@ const createShipmentNotification = async ({
                     "IN_APP",
 
                 notification:
-                    notificationResult.rows[0]
+                    createdNotification,
+
+                delivery: {
+                    email_dispatched: Boolean(preferences.email_enabled && shipment.customer_email),
+                    webhook_dispatched: Boolean(preferences.webhook_enabled && preferences.webhook_url)
+                }
 
             };
         }

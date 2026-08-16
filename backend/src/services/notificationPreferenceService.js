@@ -15,6 +15,8 @@ const getPreferencesByCustomer = async (customerId) => {
             email_enabled,
             in_app_enabled,
             webhook_enabled,
+            webhook_url,
+            webhook_secret,
 
             notify_in_transit,
             notify_customs_hold,
@@ -60,6 +62,8 @@ const createDefaultPreferences = async (customerId) => {
             email_enabled,
             in_app_enabled,
             webhook_enabled,
+            webhook_url,
+            webhook_secret,
 
             notify_in_transit,
             notify_customs_hold,
@@ -90,6 +94,8 @@ const updatePreferences = async (
         email_enabled,
         in_app_enabled,
         webhook_enabled,
+        webhook_url,
+        webhook_secret,
 
         notify_in_transit,
         notify_customs_hold,
@@ -108,6 +114,8 @@ const updatePreferences = async (
             email_enabled,
             in_app_enabled,
             webhook_enabled,
+            webhook_url,
+            webhook_secret,
 
             notify_in_transit,
             notify_customs_hold,
@@ -124,12 +132,14 @@ const updatePreferences = async (
             COALESCE($2, TRUE),
             COALESCE($3, TRUE),
             COALESCE($4, FALSE),
+            $5,
+            $6,
 
-            COALESCE($5, TRUE),
-            COALESCE($6, TRUE),
             COALESCE($7, TRUE),
             COALESCE($8, TRUE),
-            COALESCE($9, TRUE)
+            COALESCE($9, TRUE),
+            COALESCE($10, TRUE),
+            COALESCE($11, TRUE)
 
         )
 
@@ -153,6 +163,18 @@ const updatePreferences = async (
                 COALESCE(
                     EXCLUDED.webhook_enabled,
                     notification_preferences.webhook_enabled
+                ),
+
+            webhook_url =
+                COALESCE(
+                    EXCLUDED.webhook_url,
+                    notification_preferences.webhook_url
+                ),
+
+            webhook_secret =
+                COALESCE(
+                    EXCLUDED.webhook_secret,
+                    notification_preferences.webhook_secret
                 ),
 
             notify_in_transit =
@@ -194,6 +216,8 @@ const updatePreferences = async (
             email_enabled,
             in_app_enabled,
             webhook_enabled,
+            webhook_url,
+            webhook_secret,
 
             notify_in_transit,
             notify_customs_hold,
@@ -210,6 +234,8 @@ const updatePreferences = async (
             email_enabled,
             in_app_enabled,
             webhook_enabled,
+            webhook_url || null,
+            webhook_secret || null,
 
             notify_in_transit,
             notify_customs_hold,

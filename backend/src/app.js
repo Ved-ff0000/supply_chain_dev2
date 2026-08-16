@@ -14,6 +14,9 @@ const eventRoutes = require("./routes/eventRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 const notificationPreferenceRoutes =
     require("./routes/notificationPreferenceRoutes");
+const userRoutes = require("./routes/userRoutes");
+const auditLogRoutes = require("./routes/auditLogRoutes");
+const jobRoutes = require("./routes/jobRoutes");
 
 
 // ======================================================
@@ -173,13 +176,40 @@ app.use(
 
 
 // ======================================================
+// USER MANAGEMENT ROUTES (ADMIN)
+// ======================================================
+
+app.use(
+    "/api/users",
+    userRoutes
+);
+
+
+// ======================================================
+// AUDIT LOG ROUTES (ADMIN)
+// ======================================================
+
+app.use(
+    "/api/audit-log",
+    auditLogRoutes
+);
+
+// JOBS (admin/operations trigger endpoints)
+app.use(
+    "/api/jobs",
+    jobRoutes
+);
+
+
+// ======================================================
 // DASHBOARD ROUTES
 // ======================================================
 //
-// GET /api/dashboard
 // GET /api/dashboard/summary
-// GET /api/dashboard/shipments
-// GET /api/dashboard/notifications
+// GET /api/dashboard/shipments/status
+// GET /api/dashboard/shipments/priority
+// GET /api/dashboard/shipments/carriers
+// GET /api/dashboard/recent-shipments
 //
 // ======================================================
 

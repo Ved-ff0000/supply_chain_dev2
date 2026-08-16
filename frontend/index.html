@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Supply Chain Notification Hub - UI</title>
+  <link rel="stylesheet" href="css/design-tokens.css" />
+  <link rel="stylesheet" href="css/layout.css" />
+  <link rel="stylesheet" href="css/components.css" />
+  <link rel="stylesheet" href="css/views.css" />
+</head>
+<body>
+  <div id="app-shell">
+    <header class="app-header">
+      <div class="brand">SupplyChain Hub</div>
+      <div class="header-actions">
+        <div class="search-group">
+          <input id="global-search" placeholder="Search shipments, customers, routes..." />
+          <button id="search-clear" title="Clear">✕</button>
+        </div>
+        <button id="notification-btn" class="icon-btn" title="Notifications">🔔<span id="notif-badge" class="notif-badge"></span></button>
+        <select id="role-select" class="role-select">
+          <option value="OPERATIONS">Ops</option>
+          <option value="ADMIN">Admin</option>
+          <option value="CUSTOMER">Customer</option>
+        </select>
+      </div>
+    </header>
+
+    <nav class="app-nav">
+      <ul>
+        <li data-view="dashboard" class="nav-item active">Dashboard</li>
+        <li data-view="shipments" class="nav-item">Shipments</li>
+        <li data-view="events" class="nav-item">Events</li>
+        <li data-view="preferences" class="nav-item">Preferences</li>
+        <li data-view="audit" class="nav-item">Audit Log</li>
+      </ul>
+    </nav>
+
+    <main id="main-container" class="app-main">
+      <div id="view-root"></div>
+    </main>
+
+    <div id="modal-backdrop" class="modal-backdrop"></div>
+    <div id="modal-root" class="modal-root"></div>
+
+    <div id="drawer-backdrop" class="drawer-backdrop"></div>
+    <aside id="notification-drawer" class="notification-drawer"></aside>
+
+    <footer class="app-footer">&copy; 2026 SupplyChain Notification Hub</footer>
+  </div>
+
+  <!-- Core scripts (order matters) -->
+  <script src="js/components/icons.js"></script>
+  <script src="js/components/toast.js"></script>
+  <script src="js/state.js"></script>
+  <script src="js/api.js"></script>
+
+  <!-- Components -->
+  <script src="js/components/etaModal.js"></script>
+  <script src="js/components/auditDiffModal.js"></script>
+  <script src="js/components/notificationDrawer.js"></script>
+
+  <!-- Views -->
+  <script src="js/views/dashboardView.js"></script>
+  <script src="js/views/shipmentsView.js"></script>
+  <script src="js/views/eventsView.js"></script>
+  <script src="js/views/preferencesView.js"></script>
+  <script src="js/views/auditLogView.js"></script>
+
+  <!-- App bootstrap -->
+  <script src="js/app.js"></script>
+</body>
+</html>

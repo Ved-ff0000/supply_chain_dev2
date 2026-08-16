@@ -5,6 +5,18 @@ const {
     generateShipmentNotification
 } = require("../services/notificationService");
 
+const {
+    isValidStatusTransition
+} = require("../constants/statusTransitions");
+
+const {
+    SHIPMENT_STATUS
+} = require("../constants/shipmentConstants");
+
+const {
+    logAuditEvent
+} = require("../services/auditService");
+
 
 // ======================================================
 // GET ALL SHIPMENTS
@@ -36,6 +48,34 @@ const getAllShipments = async (req, res) => {
 
         const conditions = [];
         const values = [];
+
+        const userRole = String(req.user?.role || "").toUpperCase();
+
+        // Exclude soft-deleted shipments by default (ADMIN can pass include_deleted=true)
+        if (req.query.include_deleted !== "true" || userRole !== "ADMIN") {
+            conditions.push("s.is_deleted = FALSE");
+        }
+
+        // CUSTOMER users can only see their own shipments
+        if (userRole === "CUSTOMER") {
+            if (!req.user.customer_id) {
+                return res.status(403).json({
+                    success: false,
+                    message:
+                        "Customer account is not linked to a customer profile"
+                });
+            }
+
+            values.push(req.user.customer_id);
+            conditions.push(
+                `s.customer_id = $${values.length}`
+            );
+        } else if (customer_id) {
+            values.push(customer_id);
+            conditions.push(
+                `s.customer_id = $${values.length}`
+            );
+        }
 
 
         // ==================================================
@@ -82,21 +122,6 @@ const getAllShipments = async (req, res) => {
 
             conditions.push(
                 `s.carrier_id = $${values.length}`
-            );
-
-        }
-
-
-        // ==================================================
-        // CUSTOMER FILTER
-        // ==================================================
-
-        if (customer_id) {
-
-            values.push(customer_id);
-
-            conditions.push(
-                `s.customer_id = $${values.length}`
             );
 
         }
@@ -270,6 +295,7 @@ const getShipmentById = async (req, res) => {
                 ON s.carrier_id = ca.id
 
             WHERE s.id = $1
+              AND s.is_deleted = FALSE
             `,
             [id]
         );
@@ -375,6 +401,7 @@ const getShipmentByTrackingNumber = async (
                 ON s.carrier_id = ca.id
 
             WHERE s.tracking_number = $1
+              AND s.is_deleted = FALSE
             `,
             [trackingNumber]
         );
@@ -476,7 +503,7 @@ const createShipment = async (req, res) => {
         const normalizedStatus =
             status
                 ? status.trim().toUpperCase()
-                : "IN_TRANSIT";
+                : SHIPMENT_STATUS.CREATED;
 
 
         const normalizedPriority =
@@ -610,6 +637,36 @@ const createShipment = async (req, res) => {
 
 
         // ==================================================
+        // INITIAL EVENT
+        // ==================================================
+
+        await client.query(
+            `
+            INSERT INTO shipment_events (
+                shipment_id,
+                status,
+                location,
+                description,
+                event_time
+            )
+            VALUES (
+                $1,
+                $2,
+                $3,
+                $4,
+                CURRENT_TIMESTAMP
+            )
+            `,
+            [
+                result.rows[0].id,
+                normalizedStatus,
+                origin.trim(),
+                `Shipment created with status ${normalizedStatus}`
+            ]
+        );
+
+
+        // ==================================================
         // COMMIT
         // ==================================================
 
@@ -627,6 +684,20 @@ const createShipment = async (req, res) => {
 
             const shipment =
                 result.rows[0];
+
+        // ==================================================
+        // AUDIT LOG
+        // ==================================================
+
+        await logAuditEvent({
+            entityType: "SHIPMENT",
+            entityId: shipment.id,
+            action: "CREATE",
+            changedBy: req.user?.id || null,
+            oldValue: null,
+            newValue: shipment,
+            client
+        });
 
 
             const notificationData =
@@ -853,6 +924,7 @@ const updateShipmentStatus = async (
                 FROM shipments
 
                 WHERE id = $1
+                  AND is_deleted = FALSE
                 `,
                 [id]
             );
@@ -906,6 +978,29 @@ const updateShipmentStatus = async (
 
 
         // ==================================================
+        // VALIDATE STATUS TRANSITION
+        // ==================================================
+
+        if (
+            !isValidStatusTransition(
+                currentShipment.status,
+                normalizedStatus
+            )
+        ) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                message:
+                    `Invalid status transition from ${currentShipment.status} to ${normalizedStatus}`
+
+            });
+
+        }
+
+
+        // ==================================================
         // UPDATE SHIPMENT
         // ==================================================
         //
@@ -922,11 +1017,11 @@ const updateShipmentStatus = async (
 
                 SET
 
-                    status = $1,
+                    status = $1::varchar,
 
                     actual_delivery =
                         CASE
-                            WHEN $1::text = 'DELIVERED'
+                            WHEN $1::varchar = 'DELIVERED'
                             THEN CURRENT_TIMESTAMP
 
                             ELSE actual_delivery
@@ -956,6 +1051,33 @@ const updateShipmentStatus = async (
 
 
         // ==================================================
+        // RECORD EVENT
+        // ==================================================
+
+        await pool.query(
+            `
+            INSERT INTO shipment_events (
+                shipment_id,
+                status,
+                description,
+                event_time
+            )
+            VALUES (
+                $1,
+                $2,
+                $3,
+                CURRENT_TIMESTAMP
+            )
+            `,
+            [
+                id,
+                normalizedStatus,
+                `Shipment status changed to ${normalizedStatus}`
+            ]
+        );
+
+
+        // ==================================================
         // GENERATE NOTIFICATION
         // ==================================================
 
@@ -966,6 +1088,24 @@ const updateShipmentStatus = async (
 
             const updatedShipment =
                 result.rows[0];
+
+            // ==================================================
+            // AUDIT LOG
+            // ==================================================
+
+            await logAuditEvent({
+                entityType: "SHIPMENT",
+                entityId: id,
+                action: "STATUS_CHANGE",
+                changedBy: req.user?.id || null,
+                oldValue: {
+                    status: currentShipment.status
+                },
+                newValue: {
+                    status: normalizedStatus,
+                    actual_delivery: updatedShipment.actual_delivery
+                }
+            });
 
 
             const notificationData =
@@ -1099,6 +1239,28 @@ const updateShipment = async (
                 : null;
 
 
+        // ==================================================
+        // GET CURRENT SHIPMENT FOR AUDIT TRAIL
+        // ==================================================
+
+        const currentResult = await pool.query(
+            `
+            SELECT id, tracking_number, origin, destination, priority, expected_delivery
+            FROM shipments
+            WHERE id = $1 AND is_deleted = FALSE
+            `,
+            [id]
+        );
+
+        if (currentResult.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "Shipment not found"
+            });
+        }
+
+        const currentShipment = currentResult.rows[0];
+
         const result =
             await pool.query(
                 `
@@ -1134,6 +1296,7 @@ const updateShipment = async (
                         CURRENT_TIMESTAMP
 
                 WHERE id = $5
+                  AND is_deleted = FALSE
 
                 RETURNING
 
@@ -1184,6 +1347,19 @@ const updateShipment = async (
 
         }
 
+
+        // ==================================================
+        // AUDIT LOG
+        // ==================================================
+
+        await logAuditEvent({
+            entityType: "SHIPMENT",
+            entityId: id,
+            action: "UPDATE",
+            changedBy: req.user?.id || null,
+            oldValue: currentShipment,
+            newValue: result.rows[0]
+        });
 
         return res.status(200).json({
 
@@ -1240,23 +1416,47 @@ const deleteShipment = async (
         const { id } = req.params;
 
 
+        const currentResult = await pool.query(
+            `
+            SELECT id, tracking_number, customer_id, carrier_id, status
+            FROM shipments
+            WHERE id = $1 AND is_deleted = FALSE
+            `,
+            [id]
+        );
+
+        if (currentResult.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "Shipment not found"
+            });
+        }
+
+        const currentShipment = currentResult.rows[0];
+
         const result =
             await pool.query(
                 `
-                DELETE FROM shipments
-
-                WHERE id = $1
-
+                UPDATE shipments
+                SET is_deleted = TRUE,
+                    deleted_at = CURRENT_TIMESTAMP,
+                    deleted_by = $1
+                WHERE id = $2
+                  AND is_deleted = FALSE
                 RETURNING
-
                     id,
                     tracking_number,
                     customer_id,
-                    carrier_id
+                    carrier_id,
+                    is_deleted,
+                    deleted_at,
+                    deleted_by
                 `,
-                [id]
+                [
+                    req.user?.id || null,
+                    id
+                ]
             );
-
 
         if (
             result.rows.length === 0
@@ -1273,13 +1473,25 @@ const deleteShipment = async (
 
         }
 
+        // ==================================================
+        // AUDIT LOG
+        // ==================================================
+
+        await logAuditEvent({
+            entityType: "SHIPMENT",
+            entityId: id,
+            action: "SOFT_DELETE",
+            changedBy: req.user?.id || null,
+            oldValue: currentShipment,
+            newValue: result.rows[0]
+        });
 
         return res.status(200).json({
 
             success: true,
 
             message:
-                "Shipment deleted successfully",
+                "Shipment soft-deleted successfully",
 
             data:
                 result.rows[0]

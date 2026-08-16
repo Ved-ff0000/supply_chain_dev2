@@ -1,13 +1,17 @@
-require("dotenv").config();
+const path = require("path");
+require("dotenv").config({
+    path: path.join(__dirname, ".env")
+});
 
 const app = require("./src/app");
 const pool = require("./src/config/database");
+const { startDelayDetectionJob, stopDelayDetectionJob } = require("./src/jobs/delayDetectionJob");
 
 // ======================================================
 // SERVER CONFIGURATION
 // ======================================================
 
-const PORT = process.env.PORT || 5050;
+const PORT = process.env.PORT || 5000;
 
 // ======================================================
 // START SERVER
@@ -25,6 +29,12 @@ const startServer = async () => {
 
         console.log("PostgreSQL database connected");
         console.log("Database connection successful");
+
+        // ==================================================
+        // START BACKGROUND JOBS
+        // ==================================================
+
+        startDelayDetectionJob();
 
         // ==================================================
         // START EXPRESS SERVER
@@ -96,6 +106,8 @@ const shutdown = async (signal) => {
     );
 
     try {
+
+        stopDelayDetectionJob();
 
         await pool.end();
 

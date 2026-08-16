@@ -101,39 +101,20 @@ const register = async (req, res) => {
         const normalizedEmail =
             email.trim().toLowerCase();
 
-        const normalizedRole =
-            (role || "CUSTOMER")
-                .trim()
-                .toUpperCase();
-
-
-        // ==================================================
-        // VALIDATE ROLE
-        // ==================================================
-
-        const allowedRoles = [
-            "CUSTOMER",
-            "ADMIN",
-            "OPERATIONS"
-        ];
-
-
+        // Public registration is limited to CUSTOMER accounts.
+        // Privileged roles must be assigned by an ADMIN via /api/users.
         if (
-            !allowedRoles.includes(
-                normalizedRole
-            )
+            role &&
+            String(role).trim().toUpperCase() !== "CUSTOMER"
         ) {
-
-            return res.status(400).json({
-
+            return res.status(403).json({
                 success: false,
-
                 message:
-                    "Invalid role"
-
+                    "Public registration only allows CUSTOMER role"
             });
-
         }
+
+        const normalizedRole = "CUSTOMER";
 
 
         // ==================================================
@@ -482,6 +463,20 @@ const login = async (req, res) => {
             });
 
         }
+
+
+        // ==================================================
+        // UPDATE LAST LOGIN
+        // ==================================================
+
+        await pool.query(
+            `
+            UPDATE users
+            SET last_login = CURRENT_TIMESTAMP
+            WHERE id = $1
+            `,
+            [user.id]
+        );
 
 
         // ==================================================

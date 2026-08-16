@@ -31,6 +31,9 @@ const getAllNotifications = async (req, res) => {
         let customerId =
             req.user.customer_id;
 
+        const userRole =
+            String(req.user.role || "").toUpperCase();
+
 
         // ==================================================
         // ADMIN / OPERATIONS CAN FILTER BY CUSTOMER
@@ -38,14 +41,50 @@ const getAllNotifications = async (req, res) => {
 
         if (
             (
-                req.user.role === "ADMIN" ||
-                req.user.role === "OPERATIONS"
+                userRole === "ADMIN" ||
+                userRole === "OPERATIONS"
             ) &&
             req.query.customer_id
         ) {
 
             customerId =
                 req.query.customer_id;
+
+        }
+
+
+        if (
+            userRole === "CUSTOMER" &&
+            !customerId
+        ) {
+
+            return res.status(403).json({
+
+                success: false,
+
+                message:
+                    "Customer account is not linked to a customer profile"
+
+            });
+
+        }
+
+
+        // Non-privileged users must always be scoped
+        if (
+            userRole !== "ADMIN" &&
+            userRole !== "OPERATIONS" &&
+            !customerId
+        ) {
+
+            return res.status(403).json({
+
+                success: false,
+
+                message:
+                    "Customer scope is required"
+
+            });
 
         }
 

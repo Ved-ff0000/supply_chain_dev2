@@ -5,7 +5,11 @@ const {
     getShipmentsByStatus,
     getShipmentsByPriority,
     getShipmentsByCarrier,
-    getRecentShipments
+    getRecentShipments,
+    getDeliveriesOverTime,
+    getAvgTransitTime,
+    getOnTimeRate,
+    getCustomsHoldFrequency
 } = require("../controllers/dashboardController");
 
 const {
@@ -92,4 +96,64 @@ router.get(
 );
 
 
-module.exports = router;
+// ======================================================
+// DELIVERIES OVER TIME (TIME-SERIES)
+// ======================================================
+
+router.get(
+    "/deliveries-over-time",
+    authenticateToken,
+    authorizeRoles(
+        "OPERATIONS",
+        "ADMIN"
+    ),
+    getDeliveriesOverTime
+);
+
+
+// ======================================================
+// AVERAGE TRANSIT TIME BY CARRIER
+// ======================================================
+
+router.get(
+    "/avg-transit-time",
+    authenticateToken,
+    authorizeRoles(
+        "OPERATIONS",
+        "ADMIN"
+    ),
+    getAvgTransitTime
+);
+
+
+// ======================================================
+// ON-TIME DELIVERY RATE
+// ======================================================
+
+router.get(
+    "/on-time-rate",
+    authenticateToken,
+    authorizeRoles(
+        "OPERATIONS",
+        "ADMIN"
+    ),
+    getOnTimeRate
+);
+
+
+// ======================================================
+// CUSTOMS HOLD FREQUENCY
+// ======================================================
+
+router.get(
+    "/customs-hold-frequency",
+    authenticateToken,
+    authorizeRoles(
+        "OPERATIONS",
+        "ADMIN"
+    ),
+    getCustomsHoldFrequency
+);
+
+
+module.exports = router;

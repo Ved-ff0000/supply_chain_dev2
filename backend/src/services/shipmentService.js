@@ -24,6 +24,10 @@ const getAllShipments = async (filters = {}) => {
     const conditions = [];
     const values = [];
 
+    // Filter soft deleted rows by default
+    if (filters.include_deleted !== true && filters.include_deleted !== "true") {
+        conditions.push("s.is_deleted = FALSE");
+    }
 
     // STATUS FILTER
     if (status) {
@@ -197,6 +201,7 @@ const getShipmentById = async (id) => {
             ON s.carrier_id = ca.id
 
         WHERE s.id = $1
+          AND s.is_deleted = FALSE
         `,
         [Number(id)]
     );
@@ -255,6 +260,7 @@ const getShipmentByTrackingNumber = async (
             ON s.carrier_id = ca.id
 
         WHERE s.tracking_number = $1
+          AND s.is_deleted = FALSE
         `,
         [trackingNumber.trim()]
     );
@@ -998,16 +1004,18 @@ const deleteShipment = async (
     const result =
         await pool.query(
             `
-            DELETE FROM shipments
-
+            UPDATE shipments
+            SET is_deleted = TRUE,
+                deleted_at = CURRENT_TIMESTAMP
             WHERE id = $1
-
+              AND is_deleted = FALSE
             RETURNING
-
                 id,
                 tracking_number,
                 customer_id,
-                carrier_id
+                carrier_id,
+                is_deleted,
+                deleted_at
             `,
             [shipmentId]
         );

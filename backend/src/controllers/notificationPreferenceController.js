@@ -9,6 +9,8 @@ const DEFAULT_PREFERENCES = {
     email_enabled: true,
     in_app_enabled: true,
     webhook_enabled: false,
+    webhook_url: null,
+    webhook_secret: null,
 
     notify_in_transit: true,
     notify_customs_hold: true,
@@ -87,6 +89,8 @@ const getNotificationPreferences = async (req, res) => {
                 email_enabled,
                 in_app_enabled,
                 webhook_enabled,
+                webhook_url,
+                webhook_secret,
 
                 notify_in_transit,
                 notify_customs_hold,
@@ -118,6 +122,8 @@ const getNotificationPreferences = async (req, res) => {
                     email_enabled,
                     in_app_enabled,
                     webhook_enabled,
+                    webhook_url,
+                    webhook_secret,
                     notify_in_transit,
                     notify_customs_hold,
                     notify_delayed,
@@ -134,7 +140,9 @@ const getNotificationPreferences = async (req, res) => {
                     $6,
                     $7,
                     $8,
-                    $9
+                    $9,
+                    $10,
+                    $11
                 )
 
                 RETURNING
@@ -144,6 +152,8 @@ const getNotificationPreferences = async (req, res) => {
                     email_enabled,
                     in_app_enabled,
                     webhook_enabled,
+                    webhook_url,
+                    webhook_secret,
 
                     notify_in_transit,
                     notify_customs_hold,
@@ -156,11 +166,11 @@ const getNotificationPreferences = async (req, res) => {
                 `,
                 [
                     customerId,
-
                     DEFAULT_PREFERENCES.email_enabled,
                     DEFAULT_PREFERENCES.in_app_enabled,
                     DEFAULT_PREFERENCES.webhook_enabled,
-
+                    DEFAULT_PREFERENCES.webhook_url,
+                    DEFAULT_PREFERENCES.webhook_secret,
                     DEFAULT_PREFERENCES.notify_in_transit,
                     DEFAULT_PREFERENCES.notify_customs_hold,
                     DEFAULT_PREFERENCES.notify_delayed,
@@ -290,6 +300,10 @@ const updateNotificationPreferences = async (
 
             "webhook_enabled",
 
+            "webhook_url",
+
+            "webhook_secret",
+
             "notify_in_transit",
 
             "notify_customs_hold",
@@ -315,32 +329,26 @@ const updateNotificationPreferences = async (
 
             if (req.body[field] !== undefined) {
 
-                // ==========================================
-                // BOOLEAN VALIDATION
-                // ==========================================
-
-                if (
-                    typeof req.body[field] !== "boolean"
-                ) {
-
-                    return res.status(400).json({
-
-                        success: false,
-
-                        message:
-                            `${field} must be a boolean`
-
-                    });
-
+                if (field === "webhook_url" || field === "webhook_secret") {
+                    if (req.body[field] !== null && typeof req.body[field] !== "string") {
+                        return res.status(400).json({
+                            success: false,
+                            message: `${field} must be a string or null`
+                        });
+                    }
+                    values.push(req.body[field]);
+                    updates.push(`${field} = $${values.length}`);
+                } else {
+                    // BOOLEAN VALIDATION
+                    if (typeof req.body[field] !== "boolean") {
+                        return res.status(400).json({
+                            success: false,
+                            message: `${field} must be a boolean`
+                        });
+                    }
+                    values.push(req.body[field]);
+                    updates.push(`${field} = $${values.length}`);
                 }
-
-
-                values.push(req.body[field]);
-
-
-                updates.push(
-                    `${field} = $${values.length}`
-                );
 
             }
 
@@ -394,6 +402,8 @@ const updateNotificationPreferences = async (
                 email_enabled,
                 in_app_enabled,
                 webhook_enabled,
+                webhook_url,
+                webhook_secret,
 
                 notify_in_transit,
                 notify_customs_hold,
@@ -426,6 +436,8 @@ const updateNotificationPreferences = async (
                         email_enabled,
                         in_app_enabled,
                         webhook_enabled,
+                        webhook_url,
+                        webhook_secret,
                         notify_in_transit,
                         notify_customs_hold,
                         notify_delayed,
@@ -442,7 +454,9 @@ const updateNotificationPreferences = async (
                         $6,
                         $7,
                         $8,
-                        $9
+                        $9,
+                        $10,
+                        $11
                     )
 
                     RETURNING
@@ -452,6 +466,8 @@ const updateNotificationPreferences = async (
                         email_enabled,
                         in_app_enabled,
                         webhook_enabled,
+                        webhook_url,
+                        webhook_secret,
 
                         notify_in_transit,
                         notify_customs_hold,
@@ -476,6 +492,14 @@ const updateNotificationPreferences = async (
                         req.body.webhook_enabled !== undefined
                             ? req.body.webhook_enabled
                             : DEFAULT_PREFERENCES.webhook_enabled,
+
+                        req.body.webhook_url !== undefined
+                            ? req.body.webhook_url
+                            : DEFAULT_PREFERENCES.webhook_url,
+
+                        req.body.webhook_secret !== undefined
+                            ? req.body.webhook_secret
+                            : DEFAULT_PREFERENCES.webhook_secret,
 
                         req.body.notify_in_transit !== undefined
                             ? req.body.notify_in_transit
@@ -623,6 +647,8 @@ const resetNotificationPreferences = async (
                 email_enabled = TRUE,
                 in_app_enabled = TRUE,
                 webhook_enabled = FALSE,
+                webhook_url = NULL,
+                webhook_secret = NULL,
 
                 notify_in_transit = TRUE,
                 notify_customs_hold = TRUE,
@@ -641,6 +667,8 @@ const resetNotificationPreferences = async (
                 email_enabled,
                 in_app_enabled,
                 webhook_enabled,
+                webhook_url,
+                webhook_secret,
 
                 notify_in_transit,
                 notify_customs_hold,
@@ -668,6 +696,8 @@ const resetNotificationPreferences = async (
                     email_enabled,
                     in_app_enabled,
                     webhook_enabled,
+                    webhook_url,
+                    webhook_secret,
                     notify_in_transit,
                     notify_customs_hold,
                     notify_delayed,
@@ -680,6 +710,8 @@ const resetNotificationPreferences = async (
                     TRUE,
                     TRUE,
                     FALSE,
+                    NULL,
+                    NULL,
                     TRUE,
                     TRUE,
                     TRUE,
@@ -694,6 +726,8 @@ const resetNotificationPreferences = async (
                     email_enabled,
                     in_app_enabled,
                     webhook_enabled,
+                    webhook_url,
+                    webhook_secret,
 
                     notify_in_transit,
                     notify_customs_hold,

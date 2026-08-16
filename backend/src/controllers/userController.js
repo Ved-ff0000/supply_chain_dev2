@@ -1,6 +1,7 @@
 const bcrypt = require("bcryptjs");
 
 const pool = require("../config/database");
+const { logAuditEvent } = require("../services/auditService");
 
 
 // ========================================
@@ -126,7 +127,7 @@ const updateUser = async (req, res) => {
 
         const existingUser = await pool.query(
             `
-            SELECT id
+            SELECT id, name, email, role, is_active
             FROM users
             WHERE id = $1
             `,
@@ -283,6 +284,27 @@ const updateUser = async (req, res) => {
         );
 
 
+        const updatedUser = result.rows[0];
+
+        // ========================================
+        // AUDIT LOG
+        // ========================================
+
+        await logAuditEvent({
+            entityType: "USER",
+            entityId: id,
+            action: "UPDATE",
+            changedBy: req.user?.id || null,
+            oldValue: existingUser.rows[0],
+            newValue: {
+                id: updatedUser.id,
+                name: updatedUser.name,
+                email: updatedUser.email,
+                role: updatedUser.role,
+                is_active: updatedUser.is_active
+            }
+        });
+
         res.status(200).json({
             success: true,
             message: "User updated successfully",
@@ -320,8 +342,8 @@ const updateUserRole = async (req, res) => {
 
         const allowedRoles = [
             "ADMIN",
-            "MANAGER",
-            "USER"
+            "OPERATIONS",
+            "CUSTOMER"
         ];
 
 
@@ -351,6 +373,18 @@ const updateUserRole = async (req, res) => {
             });
         }
 
+
+        const existingUser = await pool.query(
+            `SELECT id, name, email, role, is_active FROM users WHERE id = $1`,
+            [id]
+        );
+
+        if (existingUser.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found"
+            });
+        }
 
         const result = await pool.query(
             `
@@ -385,6 +419,19 @@ const updateUserRole = async (req, res) => {
             });
         }
 
+
+        // ========================================
+        // AUDIT LOG
+        // ========================================
+
+        await logAuditEvent({
+            entityType: "USER",
+            entityId: id,
+            action: "ROLE_CHANGE",
+            changedBy: req.user?.id || null,
+            oldValue: { role: existingUser.rows[0].role },
+            newValue: { role: normalizedRole }
+        });
 
         res.status(200).json({
             success: true,
@@ -454,6 +501,18 @@ const updateUserStatus = async (req, res) => {
         }
 
 
+        const existingUser = await pool.query(
+            `SELECT id, name, email, role, is_active FROM users WHERE id = $1`,
+            [id]
+        );
+
+        if (existingUser.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found"
+            });
+        }
+
         const result = await pool.query(
             `
             UPDATE users
@@ -487,6 +546,19 @@ const updateUserStatus = async (req, res) => {
             });
         }
 
+
+        // ========================================
+        // AUDIT LOG
+        // ========================================
+
+        await logAuditEvent({
+            entityType: "USER",
+            entityId: id,
+            action: "STATUS_UPDATE",
+            changedBy: req.user?.id || null,
+            oldValue: { is_active: existingUser.rows[0].is_active },
+            newValue: { is_active }
+        });
 
         res.status(200).json({
             success: true,
@@ -565,6 +637,19 @@ const deleteUser = async (req, res) => {
             });
         }
 
+
+        // ========================================
+        // AUDIT LOG
+        // ========================================
+
+        await logAuditEvent({
+            entityType: "USER",
+            entityId: id,
+            action: "DELETE",
+            changedBy: req.user?.id || null,
+            oldValue: result.rows[0],
+            newValue: null
+        });
 
         res.status(200).json({
             success: true,
